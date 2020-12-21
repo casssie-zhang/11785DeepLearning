@@ -1,7 +1,5 @@
 # HW2P2 - Face Verification using Convolutional Neural Networks - Writeup
 
-Kexin Zhang AndrewID: kexinzha
-
 ## Steps to run the model
 1) python run.py
 This script runs the training process and saves model file.
