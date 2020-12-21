@@ -1,9 +1,9 @@
 # HW2P2 - Face Verification using Convolutional Neural Networks - Writeup
 
 ## Steps to run the model
-1) python run.py
+- python run.py
 This script runs the training process and saves model file.
-2) Python submit.py
+- python submit.py
 This script generates the submission file. 
 
 ## DataLoader:
@@ -14,16 +14,16 @@ Submission test data is loaded by the class submitDataset defined in dataloader.
 	2) __getitem__: return three elements: image1 tensor, image2 tensor and the label.
 
 ## Hyperparameters
-(1) Batch Size = 256 for training data loader.  Batch size = 128 for validation and verification task data loader. 
-(2) optimizer: 
-SGD optimizer
+- Batch Size = 256 for training data loader.  Batch size = 128 for validation and verification task data loader. 
+- optimizer: 
+  - SGD optimizer
 	a) initial learning rate = 0.15
 	b) momentum = 0.9
 	c) weight decay = 5e-5
-Adam optimizer
+  - Adam optimizer
 	a) initial learning rate = 1e-4
 	b) weight decay = 5e-5
-(3) scheduler:
+- scheduler:
 MultiplcativeLR scheduler is used. Factor = 0.85
 (4) num_workers = 4
 
