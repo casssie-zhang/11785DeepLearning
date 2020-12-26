@@ -35,7 +35,7 @@ Adam optimizer, weight decay = 1e-5
 (3) increase teacher forcing ratio = 0.3  
 
 5. Network Architecture
-A character-based model based on <cite>[Listen, Attend And Spell][1]</cite>
+A character-based model based on <cite>Listen, Attend And Spell[1]</cite>
 
 Listener - Encoder:   
 	- 3 layers Pyramidal Bi-LSTM Network

@@ -61,8 +61,8 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=hypers['init_learning_rate'])
     lmbda = lambda epoch: 0.85
     scheduler = MultiplicativeLR(optimizer, lr_lambda=lmbda)
-    print("optimizer:", optimizer)
-    print("scheduler:", scheduler)
+    print("optimizer:", optimizer.state_dict())
+    print("scheduler:", scheduler.state_dict())
 
 
     print("=== Start Training ===")
