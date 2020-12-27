@@ -28,6 +28,11 @@ Adam optimizer, weight decay = 1e-5
 (3) scheduler:    
 	- `MultiplicativeLR` scheduler is used. Factor = 0.85   
 	- `CosineAnnealingLR` scheduler is used, eta_min = 1e-7  
+	
+(4)  regularization techniques:
+refer to https://github.com/salesforce/awd-lstm-lm
+- locked dropout
+- embedded dropout
 
 4. Training Process
 (1) 25 epochs with Adam optimizer and MultiplicativeLR, initial learning rate = 1e-3.  

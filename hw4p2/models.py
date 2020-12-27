@@ -18,7 +18,6 @@ def pass_to_lstm(lstm, x, lens, batch_first = True):
     a wrapper for lstm with packing and unpacking sequence
     """
     rnn_inp = pack_padded_sequence(x, lengths=lens.cpu(), batch_first=batch_first, enforce_sorted=False)
-    del x
     outputs, _ = lstm(rnn_inp)
     del rnn_inp
     outputs, out_lens = pad_packed_sequence(outputs, batch_first=batch_first)
@@ -72,29 +71,31 @@ class pBLSTM(nn.Module):
     The major reason is inability of AttendAndSpell operation to extract relevant information
     from a large number of input steps.
     '''
-    def __init__(self, input_dim, hidden_dim, dropout_rate = 0.0):
+    def __init__(self, input_dim, hidden_dim):
         super(pBLSTM, self).__init__()
-        self.blstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, num_layers=1, bidirectional=True,
-                             dropout=dropout_rate,batch_first=True)
+        self.blstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, num_layers=1, bidirectional=True, batch_first=True)
 
-    def forward(self, x, lens):
+    def forward(self, x):
         '''
         :param x :(N, T) input to the pBLSTM
-        :return output: (N, T, H) encoded sequence from pyramidal Bi-LSTM 
+        :return output: (N, T, H) encoded sequence from pyramidal Bi-LSTM
         '''
-        assert (type(x) == torch.Tensor)
-        batch_size, timestep, feature_dim = x.shape
-        # x.shape = B, T/2, dim*2, chop data if needed.
-        if timestep % 2 == 1:
-            x = x[:, :-1, :] # chop
 
-        input_x = x.contiguous().view(batch_size,int(timestep/2),feature_dim*2)
-        del x
-        output, output_lens = pass_to_lstm(self.blstm, input_x, lens//2)
-        # output, hidden = self.blstm(input_x)
-        # print("after pblstm:",output.shape)
+        x_padded, x_lens = pad_packed_sequence(x, batch_first=True)
+        x_lens = x_lens.to(DEVICE)
 
-        return output, output_lens
+        # chop off extra odd/even sequence
+        x_padded = x_padded[:, :(x_padded.size(1) // 2) * 2, :] # (B, T, dim)
+
+        # reshape to (B, T/2, dim*2)
+        x_reshaped = x_padded.reshape(x_padded.size(0), x_padded.size(1) // 2, x_padded.size(2) * 2)
+        x_lens = x_lens // 2
+
+        x_packed = pack_padded_sequence(x_reshaped, lengths=x_lens.cpu(), batch_first=True, enforce_sorted=False)
+
+
+        out, _ = self.blstm(x_packed)
+        return out
 
 
 
@@ -106,33 +107,103 @@ class Encoder(nn.Module):
     '''
     def __init__(self, input_dim, hidden_dim, value_size=128,key_size=128):
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
-                            num_layers=1, bidirectional=True, batch_first=True)
-        # output.shape =(B, T, hidden)
-        
+        self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, num_layers=1, bidirectional=True, batch_first=True)
+
         ### Add code to define the blocks of pBLSTMs! ###
-        self.pBLSTM_1 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
-        self.pBLSTM_2 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
-        self.pBLSTM_3 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
+        self.pBLSTMs = nn.Sequential(
+            pBLSTM(hidden_dim*4, hidden_dim),
+            pBLSTM(hidden_dim*4, hidden_dim),
+            pBLSTM(hidden_dim*4, hidden_dim)
+        )
 
         self.key_network = nn.Linear(hidden_dim*2, value_size)
         self.value_network = nn.Linear(hidden_dim*2, key_size)
 
-        # self.listener_layer = listener_layer
-
     def forward(self, x, lens):
-        # print("original:", x.shape)
-        outputs = pass_to_lstm(self.lstm, x, lens)[0]
+        rnn_inp = pack_padded_sequence(x, lengths=lens.cpu(), batch_first=True, enforce_sorted=False)
 
-        outputs, out_lens = self.pBLSTM_1(outputs, lens)
-        outputs, out_lens = self.pBLSTM_2(outputs, out_lens)
-        outputs, out_lens = self.pBLSTM_3(outputs, out_lens)
+        outputs, _ = self.lstm(rnn_inp)
 
-        linear_input = outputs
+
+        ### Use the outputs and pass it through the pBLSTM blocks! ###
+        outputs = self.pBLSTMs(outputs)
+
+        linear_input, encoder_lens = pad_packed_sequence(outputs, batch_first=True)
         keys = self.key_network(linear_input)
         value = self.value_network(linear_input)
+        return keys, value, encoder_lens
 
-        return keys, value, out_lens
+# class pBLSTM(nn.Module):
+#     '''
+#     Pyramidal BiLSTM
+#     The length of utterance (speech input) can be hundereds to thousands of frames long.
+#     The Paper reports that a direct LSTM implementation as Encoder resulted in slow convergence,
+#     and inferior results even after extensive training.
+#     The major reason is inability of AttendAndSpell operation to extract relevant information
+#     from a large number of input steps.
+#     '''
+#     def __init__(self, input_dim, hidden_dim, dropout_rate = 0.0):
+#         super(pBLSTM, self).__init__()
+#         self.blstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, num_layers=1, bidirectional=True,
+#                              dropout=dropout_rate,batch_first=True)
+#
+#     def forward(self, x, lens):
+#         '''
+#         :param x :(N, T) input to the pBLSTM
+#         :return output: (N, T, H) encoded sequence from pyramidal Bi-LSTM
+#         '''
+#         assert (type(x) == torch.Tensor)
+#         batch_size, timestep, feature_dim = x.shape
+#         # x.shape = B, T/2, dim*2, chop data if needed.
+#         if timestep % 2 == 1:
+#             x = x[:, :-1, :] # chop
+#
+#         input_x = x.contiguous().view(batch_size,int(timestep/2),feature_dim*2)
+#         del x
+#         lens = lens.detach().cpu()
+#         output, output_lens = pass_to_lstm(self.blstm, input_x, lens//2)
+#         # output, hidden = self.blstm(input_x)
+#         # print("after pblstm:",output.shape)
+#
+#         return output, output_lens
+#
+#
+#
+#
+# class Encoder(nn.Module):
+#     '''
+#     Encoder takes the utterances as inputs and returns the key and value.
+#     Key and value are nothing but simple projections of the output from pBLSTM network.
+#     '''
+#     def __init__(self, input_dim, hidden_dim, value_size=128,key_size=128):
+#         super(Encoder, self).__init__()
+#         self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
+#                             num_layers=1, bidirectional=True, batch_first=True)
+#         # output.shape =(B, T, hidden)
+#
+#         ### Add code to define the blocks of pBLSTMs! ###
+#         self.pBLSTM_1 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
+#         self.pBLSTM_2 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
+#         self.pBLSTM_3 = pBLSTM(hidden_dim * 2 * 2, hidden_dim)
+#
+#         self.key_network = nn.Linear(hidden_dim*2, value_size)
+#         self.value_network = nn.Linear(hidden_dim*2, key_size)
+#
+#         # self.listener_layer = listener_layer
+#
+#     def forward(self, x, lens):
+#         # print("original:", x.shape)
+#         outputs = pass_to_lstm(self.lstm, x, lens)[0]
+#
+#         outputs, out_lens = self.pBLSTM_1(outputs, lens)
+#         outputs, out_lens = self.pBLSTM_2(outputs, out_lens)
+#         outputs, out_lens = self.pBLSTM_3(outputs, out_lens)
+#
+#         linear_input = outputs
+#         keys = self.key_network(linear_input)
+#         value = self.value_network(linear_input)
+#
+#         return keys, value, out_lens
 
 
 

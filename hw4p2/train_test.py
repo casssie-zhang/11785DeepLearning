@@ -147,7 +147,7 @@ def validation(model, dev_loader, criterion, epoch, target_text, print_samples=F
 
     return val_loss
 
-def test(model:Seq2Seq, test_loader, criterion, csv_name="submission.csv"):
+def test(model:Seq2Seq, test_loader, csv_name="submission.csv"):
     ### Write your test code here! ###
     model.eval()
     model.to(DEVICE)
